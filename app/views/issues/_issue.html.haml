@@ -1,0 +1,18 @@
+= div_for(issue, :class => issue.resolved? ? 'resolved' : 'open') do
+  - if issue.resolved?
+    %span.pull-right.label Resolved
+    %span.pull-right.at{:title => issue.resolved_at}= server_time(issue.resolved_at)
+  - else
+    %span.at{:title => issue.starts_at} Started #{time_ago_in_words(issue.starts_at)} ago
+
+  %h3.title= issue.title
+
+  .updates
+    - issue.updates.each do |update|
+      .update
+        = to_markup(update.description) do
+          %span.at{:title => update.created_at} #{server_time(update.created_at)}
+
+  - if editable?
+    %p= link_to "Edit", edit_issue_path(issue)
+

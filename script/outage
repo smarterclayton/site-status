@@ -1,0 +1,155 @@
+#!/usr/bin/env ruby
+
+SCRIPT_ROOT = File.expand_path('../..', __FILE__)
+$LOAD_PATH << File.join(SCRIPT_ROOT,'lib')
+
+require 'bundler'
+Bundler.require
+
+# Error message to use when unable to write to db"
+SQL_RO_ERR = "Cannot write to database, unable to update issue (Rails is probably running; try running with sudo or as Rails user)"
+
+require 'thor'
+
+class UpdateStatusCli < Thor
+  include Thor::Actions
+
+  no_tasks do
+    def say_errors(model, msg=nil)
+      unless msg.nil?
+        say msg
+      end
+      model.errors.each {|attr,msg| say "#{attr} - #{msg}" }
+    end
+
+    def env
+      require File.expand_path('config/environment.rb')
+    end
+  end
+
+  desc "new TITLE DESCRIPTION", "Start a new issue with and describe what is going on/affected"
+  def new(title,description)
+    env
+    issue = Issue.new :title => title
+    begin
+      if issue.save
+        say "Created issue \##{issue.id}"
+        invoke :update , [issue.id, description], :nested => true
+        #invoke :push, []
+      else
+        say_errors issue, "Unable to create issue"
+      end
+    rescue ActiveRecord::StatementInvalid => sql
+      say_errors issue, SQL_RO_ERR
+    rescue ActiveRecord::Rollback
+      say_errors issue, "Undoing creation of #{issue.id}" 
+      issue.delete
+    end
+  end
+
+  desc "update ISSUE_ID DESCRIPTION", "Add an update to an issue without resolving it"
+  def update(issue_id, description)
+    env
+    issue = Issue.find_by_id issue_id
+    if issue.nil?
+      say "Issue #{issue_id} does not exist"
+    else
+      update = issue.updates.new :description => description
+      begin
+        if update.save
+          say "Update applied to issue \##{issue_id}"
+          if options[:nested].nil?
+            #invoke :push, []
+          end
+        else
+          say_errors update, "Unable to update issue"
+          raise ActiveRecord::Rollback
+        end
+      rescue ActiveRecord::StatementInvalid => sql
+        say_errors update, SQL_RO_ERR
+      end
+    end
+  end
+
+  desc "resolve ISSUE_ID DESCRIPTION", "Resolve an issue with a final update. Description is required."
+  def resolve(issue_id, description)
+    env
+    issue = Issue.find_by_id issue_id
+    if issue.nil?
+      say "Issue #{issue_id} does not exist"
+    else
+      begin
+        invoke :update, [issue_id, description], :nested => true
+        if issue.resolve
+          say "Resolved issue \##{issue_id}"
+          #invoke :push, []
+        else
+          say_errors issue, "Unable to resolve issue"
+        end
+      rescue ActiveRecord::StatementInvalid => sql
+        say_errors issue, SQL_RO_ERR
+      rescue ActiveRecord::Rollback
+        say_errors issue, "Undoing resolution of #{issue.id}" 
+      end
+    end
+  end
+
+  desc "list","List all issues"
+  def list
+    env
+    [ ['Open',Issue.unresolved],
+      ['Resolved',Issue.resolved]
+    ].each do |args|
+      name,issues = args[0],args[1]
+      say name
+      if issues.empty?
+        say "      None"
+      else
+        issues.each do |issue|
+          say sprintf("  #%d: %s",issue.id,issue.title)
+        end
+      end
+    end
+  end
+
+  desc "push", "Push this host's status to all other hosts"
+  method_option :force, :type => :boolean, :aliases => "-f"
+  def push()
+    env
+    if Issue.all.empty?
+      say_status "Error!", "No issues exist, refusing to push", :red
+      return unless options.force? && yes?("Are you sure?")
+    end
+
+    hosts = YAML.load(File.open(File.join(SCRIPT_ROOT,'config','hosts.yml')))
+    hostname = get_hostname
+
+    (hosts[:hosts] - [hostname]).each do |host|
+      url = sprintf(hosts[:template],host)
+      say "Syncing #{url}"
+      http_req("#{url}/sync/#{hostname}") do |resp|
+        string = "Failed: Server responded with "
+        case resp
+        when Net::HTTPSuccess, Net::HTTPRedirection
+          string = "Success"
+        when String
+          string << resp
+        else
+          string << resp.code
+        end
+        puts "\t#{string}"
+      end
+    end
+  end
+
+  desc "clear", "Clear all issues/updates from this host"
+  method_option :force, :type => :boolean, :aliases => "-f"
+  def clear()
+    env
+    if options.force? || yes?("Are you sure?")
+      delete_all
+    end
+  end
+end
+
+UpdateStatusCli.start

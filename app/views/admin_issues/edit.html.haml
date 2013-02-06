@@ -1,0 +1,56 @@
+= link_to "Return to issues list", admin_issues_path
+
+= form_for @issue do |f|
+  %h4 Issue
+  = errors_for(@issue)
+  .title
+    = f.label :title
+    = f.text_field :title
+
+  .schedule
+    = check_box_tag :scheduled, 1, @issue.scheduled?
+    = label_tag :scheduled, "Begin this issue automatically at:"
+
+    %table
+      %tr.begins_at
+        %td From
+        %td
+          = f.datetime_select :begins_at, :default => Date.today
+          = f.time_zone_select :timezone, ActiveSupport::TimeZone.us_zones, :default => 'Eastern Time (US & Canada)'
+      %tr.ends_at
+        %td To
+        %td
+          = f.datetime_select :ends_at, :default => Date.today
+
+  .date Created #{@issue.created_at}
+
+  = f.submit "Change"
+
+= form_for @update do |f|
+  %h4 Provide an update
+  = errors_for(@update)
+  = f.hidden_field :issue_id
+
+  .description
+    = f.label :description
+    = f.text_area :description
+
+  .resolve
+    = check_box_tag :resolve
+    = label_tag :resolve, "Mark this issue as resolved with this comment"
+
+  = f.submit "Add"
+
+%h4 Alter an existing update
+%ol
+  - @issue.updates.each do |update|
+    .li
+      = form_for update do |f|
+        = errors_for(update)
+        .date Created #{update.created_at}
+        .description
+          = f.label :description
+          = f.text_area :description
+
+        = f.submit "Change"
+

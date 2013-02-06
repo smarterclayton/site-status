@@ -1,0 +1,36 @@
+%h1 Status
+
+.row
+  .span8
+    %section.open
+      - if @open.empty?
+        %p All systems operating normally.
+      - else
+        %h2 Tracking these issues:
+        = render @open
+
+    - if @total_resolved > 0
+      %hr
+      %section.resolved
+        - if @resolved.empty?
+          - unless @open.empty?
+            %p Browse #{link_to "resolved issues", archived_issues_path}.
+        - else
+          - @resolved.group_by{ |issue| issue.resolved_at.to_date }.each do |group, issues|
+            %h2= group.strftime("%B %-d, %Y")
+            = render issues
+
+    %p As of #{server_time(DateTime.now)}
+
+  - if editable? or @scheduled.present?
+    .span4
+      - if editable?
+        = link_to "Open issue", new_issue_path
+      %section.scheduled
+        %h5 Scheduled downtime
+        - @scheduled.each do |outage|
+          .outage
+            #{server_datetime(outage.begins_at)} - #{outage.title} - #{distance_of_time_in_words(outage.starts_at, outage.ends_at)}
+            - if editable?
+              = link_to "Edit", edit_issue_path(outage)
+

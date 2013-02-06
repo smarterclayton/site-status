@@ -1,0 +1,28 @@
+= link_to "Return to issues list", admin_issues_path
+
+= form_for @issue, :url => admin_issues_path do |f|
+  = errors_for(@issue)
+  .title
+    = f.label :title
+    = f.text_field :title
+
+  .schedule
+    = check_box_tag :scheduled, 1, @issue.scheduled?
+    = label_tag :scheduled, "Begin this issue automatically at:"
+
+    %table
+      %tr.begins_at
+        %td From
+        %td
+          = f.datetime_select :begins_at, :default => Date.tomorrow
+          = f.time_zone_select :timezone, ActiveSupport::TimeZone.us_zones, :default => 'Eastern Time (US & Canada)'
+      %tr.ends_at
+        %td To
+        %td
+          = f.datetime_select :ends_at, :default => Date.tomorrow
+
+  = fields_for @issue.updates.first do |u|
+    .description
+      = u.label :description
+      = u.text_area :description
+  = f.submit "Open"
